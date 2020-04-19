@@ -24,6 +24,7 @@
 
 #include <inttypes.h> /* intmax_t, uintmax_t, PRI* */
 #include <stddef.h> /* size_t */
+#include <stdio.h>
 
 typedef void (*ctest_setup_func)(void*);
 typedef void (*ctest_teardown_func)(void*);
@@ -52,6 +53,16 @@ typedef void (*ctest_teardown_func)(void*);
 
 CTEST_IMPL_DIAG_PUSH_IGNORED(strict-prototypes)
 
+#define FORMAT_STR(x) _Generic((x), \
+                        char: "%c", \
+                        int: "%d", \
+                        short: "%d", \
+                        long: "%ld", \
+                        unsigned int: "%u", \
+                        unsigned short: "%u", \
+                        unsigned long: "%lu",\
+                        default: "%p")
+
 struct ctest {
     const char* ssname;  // suite name
     const char* ttname;  // test name
@@ -65,6 +76,27 @@ struct ctest {
 
     unsigned int magic;
 };
+
+
+
+#define assert_eq(exp, real, caller, line) do {\
+            if ((exp) != (real)) {\
+                char buffer[512]; \
+                char *p = buffer; \
+                p += snprintf(p, sizeof(buffer) - (p-buffer), FORMAT_STR(exp), exp); \
+                p += snprintf(p, sizeof(buffer) - (p-buffer), " , got "); \
+                p += snprintf(p, sizeof(buffer) - (p-buffer), FORMAT_STR(real), real); \
+                CTEST_ERR("%s:%d  expected %s", caller, line, buffer); \
+            } \
+          } while(0)
+
+#define assert_not_eq(exp, real, caller, line) do {\
+            if ((exp) == (real)) { \
+                char buffer[512]; \
+                snprintf(buffer, sizeof(buffer), FORMAT_STR(real), real); \
+                CTEST_ERR("%s:%d  should not be %s", caller, line, buffer); \
+            } \
+          } while(0)
 
 CTEST_IMPL_DIAG_POP()
 
@@ -146,26 +178,16 @@ void assert_data(const unsigned char* exp, size_t expsize,
 #define ASSERT_DATA(exp, expsize, real, realsize) \
     assert_data(exp, expsize, real, realsize, __FILE__, __LINE__)
 
-void assert_equal(intmax_t exp, intmax_t real, const char* caller, int line);
-#define ASSERT_EQUAL(exp, real) assert_equal(exp, real, __FILE__, __LINE__)
+#define ASSERT_EQUAL(exp, real) assert_eq(exp, real, __FILE__, __LINE__)
 
-void assert_equal_u(uintmax_t exp, uintmax_t real, const char* caller, int line);
-#define ASSERT_EQUAL_U(exp, real) assert_equal_u(exp, real, __FILE__, __LINE__)
-
-void assert_not_equal(intmax_t exp, intmax_t real, const char* caller, int line);
-#define ASSERT_NOT_EQUAL(exp, real) assert_not_equal(exp, real, __FILE__, __LINE__)
-
-void assert_not_equal_u(uintmax_t exp, uintmax_t real, const char* caller, int line);
-#define ASSERT_NOT_EQUAL_U(exp, real) assert_not_equal_u(exp, real, __FILE__, __LINE__)
+#define ASSERT_NOT_EQUAL(exp, real) assert_not_eq(exp, real, __FILE__, __LINE__)
 
 void assert_interval(intmax_t exp1, intmax_t exp2, intmax_t real, const char* caller, int line);
 #define ASSERT_INTERVAL(exp1, exp2, real) assert_interval(exp1, exp2, real, __FILE__, __LINE__)
 
-void assert_null(void* real, const char* caller, int line);
-#define ASSERT_NULL(real) assert_null((void*)real, __FILE__, __LINE__)
+#define ASSERT_NULL(real) ASSERT_EQUAL(NULL, real)
 
-void assert_not_null(const void* real, const char* caller, int line);
-#define ASSERT_NOT_NULL(real) assert_not_null(real, __FILE__, __LINE__)
+#define ASSERT_NOT_NULL(real) ASSERT_NOT_EQUAL(NULL, real)
 
 void assert_true(int real, const char* caller, int line);
 #define ASSERT_TRUE(real) assert_true(real, __FILE__, __LINE__)
@@ -324,30 +346,6 @@ void assert_data(const unsigned char* exp, size_t expsize,
     }
 }
 
-void assert_equal(intmax_t exp, intmax_t real, const char* caller, int line) {
-    if (exp != real) {
-        CTEST_ERR("%s:%d  expected %" PRIdMAX ", got %" PRIdMAX, caller, line, exp, real);
-    }
-}
-
-void assert_equal_u(uintmax_t exp, uintmax_t real, const char* caller, int line) {
-    if (exp != real) {
-        CTEST_ERR("%s:%d  expected %" PRIuMAX ", got %" PRIuMAX, caller, line, exp, real);
-    }
-}
-
-void assert_not_equal(intmax_t exp, intmax_t real, const char* caller, int line) {
-    if ((exp) == (real)) {
-        CTEST_ERR("%s:%d  should not be %" PRIdMAX, caller, line, real);
-    }
-}
-
-void assert_not_equal_u(uintmax_t exp, uintmax_t real, const char* caller, int line) {
-    if ((exp) == (real)) {
-        CTEST_ERR("%s:%d  should not be %" PRIuMAX, caller, line, real);
-    }
-}
-
 void assert_interval(intmax_t exp1, intmax_t exp2, intmax_t real, const char* caller, int line) {
     if (real < exp1 || real > exp2) {
         CTEST_ERR("%s:%d  expected %" PRIdMAX "-%" PRIdMAX ", got %" PRIdMAX, caller, line, exp1, exp2, real);
@@ -375,18 +373,6 @@ void assert_dbl_far(double exp, double real, double tol, const char* caller, int
     }
     if (absdiff <= tol) {
         CTEST_ERR("%s:%d  expected %0.3e, got %0.3e (diff %0.3e, tol %0.3e)", caller, line, exp, real, diff, tol);
-    }
-}
-
-void assert_null(void* real, const char* caller, int line) {
-    if ((real) != NULL) {
-        CTEST_ERR("%s:%d  should be NULL", caller, line);
-    }
-}
-
-void assert_not_null(const void* real, const char* caller, int line) {
-    if (real == NULL) {
-        CTEST_ERR("%s:%d  should not be NULL", caller, line);
     }
 }
 
